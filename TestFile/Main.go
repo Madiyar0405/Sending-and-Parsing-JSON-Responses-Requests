@@ -1,65 +1,53 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 )
 
-func sendRequest(url string, payload map[string]interface{}) (string, error) {
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	return string(body), nil
+type RequestBody struct {
+	Message string `json:"message"`
 }
 
-func parseResponse(response string) (map[string]interface{}, error) {
-	var data map[string]interface{}
-	err := json.Unmarshal([]byte(response), &data)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+type ResponseBody struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var requestBody RequestBody
 
-	url := "https://krisha.kz/"
+			decoder := json.NewDecoder(r.Body)
+			err := decoder.Decode(&requestBody)
+			if err != nil {
+				http.Error(w, "Invalid JSON message", http.StatusBadRequest)
+				return
+			}
 
-	payload := map[string]interface{}{
-		"key1": "value1",
-		"key2": 42,
-		"key3": true,
-	}
+			if requestBody.Message != "" {
+				fmt.Println("Received message:", requestBody.Message)
 
-	response, err := sendRequest(url, payload)
-	if err != nil {
-		fmt.Println("Ошибка при отправке запроса:", err)
-		return
-	}
+				response := ResponseBody{
+					Status:  "success",
+					Message: "Данные успешно приняты",
+				}
 
-	fmt.Println("Ответ от сервера:", response)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
 
-	parsedData, err := parseResponse(response)
-	if err != nil {
-		fmt.Println("Ошибка при разборе JSON:", err)
-		return
-	}
+				encoder := json.NewEncoder(w)
+				encoder.Encode(response)
+			} else {
+				http.Error(w, "Invalid or missing 'message' field", http.StatusBadRequest)
+			}
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 
-	fmt.Println("Разобранные данные:", parsedData)
+	fmt.Println("Server is listening on :8080")
+	http.ListenAndServe(":8080", nil)
 }
